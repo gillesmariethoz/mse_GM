@@ -3,7 +3,11 @@ window.MSEOneDriveLinks = (() => {
   const SECTIONS = { cours: '01_Cours', exercices: '02_Exercices', projets: '03_Projets', resumes: '04_Resumes' };
   const SITE = 'https://hessoit-my.sharepoint.com/my?id=';
   const ROOT = '/personal/gilles_marietho_hes-so_ch/Documents/HES-SO-Master/semestre 1';
-  const folderUrl = (module, section) => SITE + encodeURIComponent(`${ROOT}/${MODULES[module]}/${SECTIONS[section]}`);
-  const fileUrl = (module, section, name) => SITE + encodeURIComponent(`${ROOT}/${MODULES[module]}/${SECTIONS[section]}/${name}`);
+  const folderPath = (module, section) => `${ROOT}/${MODULES[module]}/${SECTIONS[section]}`;
+  const folderUrl = (module, section) => SITE + encodeURIComponent(folderPath(module, section));
+  const fileUrl = (module, section, name) => {
+    const folder = folderPath(module, section);
+    return `${SITE}${encodeURIComponent(`${folder}/${name}`)}&parent=${encodeURIComponent(folder)}`;
+  };
   return { MODULES, SECTIONS, folderUrl, fileUrl };
 })();
