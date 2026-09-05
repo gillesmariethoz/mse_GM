@@ -1,0 +1,6 @@
+# Les fichiers OneDrive et secrets ne doivent jamais être publiés.
+*.pdf
+*.docx
+*.pptx
+*.xlsx
+config.local.js
