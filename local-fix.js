@@ -77,7 +77,7 @@ const themeText = document.getElementById('themeText');
 const courseBarStyle = document.createElement('style');
 courseBarStyle.textContent = '.course-card .bar{display:block!important;position:relative!important;height:5px!important;overflow:hidden!important}.course-card .bar i{position:absolute!important;inset:0 auto 0 0!important;height:100%!important;max-width:100%!important;margin:0!important}';
 document.head.append(courseBarStyle);
-courseBarStyle.textContent += '.new-task{flex-wrap:wrap}.new-task #taskInput{min-width:210px}.new-task #taskDate,.new-task #taskCourse{border:1px solid var(--line);border-radius:9px;padding:10px;background:var(--card);color:var(--ink);font:inherit}.task-main{display:block}.task-meta{display:block;margin-top:3px;font-size:11px;color:var(--muted)}';
+courseBarStyle.textContent += '.today-grid{align-items:start}.task-list{min-height:0}.new-task{flex-wrap:wrap}.new-task #taskInput{min-width:210px}.new-task #taskDate,.new-task #taskCourse{border:1px solid var(--line);border-radius:9px;padding:10px;background:var(--card);color:var(--ink);font:inherit}.task-main{display:block}.task-meta{display:block;margin-top:3px;font-size:11px;color:var(--muted)}';
 
 /* Les tâches peuvent être reliées à un cours et à une échéance. */
 const taskDate = document.createElement('input');

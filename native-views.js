@@ -21,6 +21,21 @@
     ['2026-09-17','05:50','Nendaz → Sion · Car postal 362','Personnel'],['2026-09-17','06:39','Sion → Lausanne Provence · IR95','Personnel'],['2026-09-17','12:30','Lausanne Provence → Genève','Personnel'],['2026-09-17','18:05','Genève → Sion · IR90','Personnel'],['2026-09-17','20:01','Sion → Nendaz · Car postal 362','Personnel'],['2026-09-17','13:30','Dîner · Poulet teriyaki','Personnel']
   ].map(([date,time,title,kind]) => ({date,time,title,kind}));
   let events = get('mse.events', []); [...seed,...completeSeed].forEach(item => { if (!events.some(event => event.date===item.date && event.time===item.time && event.title===item.title)) events.push(item); }); put('mse.events', events);
+  const semesterStart = new Date('2026-09-14T12:00:00');
+  const semesterEnd = new Date('2026-12-17T12:00:00');
+  const routine = [...seed, ...completeSeed].map(item => ({ ...item, offset: Math.round((new Date(item.date + 'T12:00:00') - semesterStart) / 86400000) }));
+  for (let week = 1; ; week += 1) {
+    let any = false;
+    routine.forEach(item => {
+      const date = new Date(semesterStart); date.setDate(date.getDate() + item.offset + week * 7);
+      if (date > semesterEnd) return;
+      any = true;
+      const next = { date: date.toISOString().slice(0,10), time: item.time, title: item.title, kind: item.kind };
+      if (!events.some(event => event.date === next.date && event.time === next.time && event.title === next.title)) events.push(next);
+    });
+    if (!any) break;
+  }
+  put('mse.events', events);
   const monday = date => { const copy = new Date(date); copy.setDate(copy.getDate() - ((copy.getDay() + 6) % 7)); copy.setHours(0,0,0,0); return copy; };
   const iso = date => date.toISOString().slice(0,10);
   let weekStart = new Date('2026-09-14T12:00:00');
@@ -34,16 +49,42 @@
     planRoot.querySelector('#nativePlanForm').onsubmit = event => { event.preventDefault(); events.push({title:planRoot.querySelector('#nativePlanTitle').value.trim(),date:planRoot.querySelector('#nativePlanDate').value,time:planRoot.querySelector('#nativePlanTime').value,kind:planRoot.querySelector('#nativePlanKind').value}); put('mse.events',events); renderPlan(); };
   };
 
-  const moduleSpecs = [['Physics',[['Examen final',1]]],['HYBRD',[['Projet / continu',.5],['Examen écrit',.5]]],['ModSim',[['Examen final',1]]],['Multiphy',[['Examen final',1]]],['QRM',[['Travail semestre',.3],['Examen écrit',.7]]],['OrdDiff',[['Examen final',1]]],['FMechHeat',[['Examen final',1]]],['CSM',[['Examen final',1]]],['Adv. Project Mgmt',[['Projet',1/3],['Examen écrit',2/3]]],['CompAlg',[['Examen final',1]]],['CFD',[['Projet / continu',.5],['Examen oral',.5]]]];
+  const moduleSpecs = [['Physics',[['Examen final',1]]],['HYBRD',[['Projet / continu',.5,true],['Examen écrit',.5]]],['ModSim',[['Examen final',1]]],['Multiphy',[['Examen final',1]]],['QRM',[['Travail semestre',.3],['Examen écrit',.7]]],['OrdDiff',[['Examen final',1]]],['FMechHeat',[['Examen final',1]]],['CSM',[['Examen final',1]]],['Adv. Project Mgmt',[['Projet',1/3],['Examen écrit',2/3]]],['CompAlg',[['Examen final',1]]],['CFD',[['Projet / continu',.5,true],['Examen oral',.5]]]];
   let marks = get('mse.marks', {});
   const gradeRoot = document.getElementById('nativeGrades');
   const isMark = value => value !== '' && value !== undefined && +value >= 1 && +value <= 6;
+  const markList = value => Array.isArray(value) ? value : (value === undefined || value === '' ? [] : [value]);
   const renderGrades = () => {
-    let total=0, complete=0, passed=0;
-    const cards = moduleSpecs.map(([name,parts], index) => { const values=marks[index]||{}; const scores=parts.map((part,partIndex)=>isMark(values[partIndex])?+values[partIndex]:null); const done=scores.every(score=>score!==null); const grade=done?parts.reduce((sum,part,partIndex)=>sum+part[1]*scores[partIndex],0):null; if(done){complete++;total+=grade;if(grade>=4)passed++;} return `<article class="native-module"><div class="native-module-head"><div><h3>${name}</h3><small>3 ECTS</small></div><div class="native-score"><b>${grade===null?'—':grade.toFixed(2)}</b><small>module</small></div></div>${parts.map(([label,weight],partIndex)=>`<div class="native-component"><label>${label}<small>Compte pour ${Math.round(weight*100)}% du module</small></label><input class="native-mark" data-mark-module="${index}" data-mark-part="${partIndex}" type="number" min="1" max="6" step="0.1" inputmode="decimal" placeholder="—" value="${values[partIndex]??''}"></div>`).join('')}<span class="native-status ${done&&grade>=4?'ok':''}">${done?(grade>=4?'✓ Module validé':'À consolider'):`${scores.filter(score=>score!==null).length} / ${parts.length} composante${parts.length>1?'s':''}`}</span></article>`; }).join('');
-    gradeRoot.innerHTML = `<div class="native-summary"><div class="native-stat"><b>${complete? (total/complete).toFixed(2):'—'}</b><small>Moyenne actuelle</small></div><div class="native-stat"><b>${complete} / 11</b><small>modules complets</small></div><div class="native-stat"><b>${passed}</b><small>modules validés</small></div></div><div class="native-grade-grid">${cards}</div>`;
-    put('mse.grades', Object.fromEntries(moduleSpecs.map(([,parts],index)=>{const values=marks[index]||{},scores=parts.map((_,partIndex)=>+values[partIndex]);return [index,scores.every(score=>score>=1&&score<=6)?parts.reduce((sum,part,partIndex)=>sum+part[1]*scores[partIndex],0):null]})));
-    gradeRoot.querySelectorAll('[data-mark-module]').forEach(input => input.onchange = () => { const i=input.dataset.markModule,j=input.dataset.markPart; marks[i]??={}; if(input.value==='') delete marks[i][j]; else marks[i][j]=input.value; put('mse.marks',marks); renderGrades(); });
+    let total = 0, complete = 0, passed = 0, finals = {};
+    const cards = moduleSpecs.map(([name, parts], index) => {
+      const values = marks[index] || {};
+      const scores = parts.map(([, , multi], partIndex) => {
+        const list = multi ? markList(values[partIndex]) : [values[partIndex]];
+        return list.length && list.every(isMark) ? list.reduce((sum, mark) => sum + (+mark), 0) / list.length : null;
+      });
+      const done = scores.every(score => score !== null);
+      const grade = done ? parts.reduce((sum, part, partIndex) => sum + part[1] * scores[partIndex], 0) : null;
+      finals[index] = grade;
+      if (done) { complete += 1; total += grade; if (grade >= 4) passed += 1; }
+      const fields = parts.map(([label, weight, multi], partIndex) => {
+        if (!multi) return `<div class="native-component"><label>${label}<small>Compte pour ${Math.round(weight * 100)}% du module</small></label><input class="native-mark" data-mark-module="${index}" data-mark-part="${partIndex}" type="number" min="1" max="6" step="0.1" inputmode="decimal" placeholder="—" value="${values[partIndex] ?? ''}"></div>`;
+        const list = markList(values[partIndex]);
+        const inputs = (list.length ? list : ['']).map((mark, markIndex) => `<input class="native-mark" data-mark-module="${index}" data-mark-part="${partIndex}" data-mark-index="${markIndex}" type="number" min="1" max="6" step="0.1" inputmode="decimal" placeholder="—" value="${mark}">`).join('');
+        return `<div class="native-component" style="display:block"><label>${label}<small>La moyenne de tes contrôles continus compte pour ${Math.round(weight * 100)}% du module</small></label><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${inputs}<button class="native-button" data-add-mark="${index}" data-add-part="${partIndex}" type="button">+ Ajouter une note</button></div></div>`;
+      }).join('');
+      const status = done ? (grade >= 4 ? '✓ Module validé' : 'À consolider') : `${scores.filter(score => score !== null).length} / ${parts.length} composante${parts.length > 1 ? 's' : ''}`;
+      return `<article class="native-module"><div class="native-module-head"><div><h3>${name}</h3><small>3 ECTS</small></div><div class="native-score"><b>${grade === null ? '—' : grade.toFixed(2)}</b><small>module</small></div></div>${fields}<span class="native-status ${done && grade >= 4 ? 'ok' : ''}">${status}</span></article>`;
+    }).join('');
+    gradeRoot.innerHTML = `<div class="native-summary"><div class="native-stat"><b>${complete ? (total / complete).toFixed(2) : '—'}</b><small>Moyenne actuelle</small></div><div class="native-stat"><b>${complete} / 11</b><small>modules complets</small></div><div class="native-stat"><b>${passed}</b><small>modules validés</small></div></div><div class="native-grade-grid">${cards}</div>`;
+    put('mse.grades', finals);
+    gradeRoot.querySelectorAll('[data-mark-module]').forEach(input => input.onchange = () => {
+      const moduleIndex = input.dataset.markModule, partIndex = input.dataset.markPart, markIndex = input.dataset.markIndex;
+      marks[moduleIndex] ??= {};
+      if (markIndex === undefined) { if (input.value === '') delete marks[moduleIndex][partIndex]; else marks[moduleIndex][partIndex] = input.value; }
+      else { const list = markList(marks[moduleIndex][partIndex]); if (input.value === '') list.splice(+markIndex, 1); else list[+markIndex] = input.value; marks[moduleIndex][partIndex] = list; }
+      put('mse.marks', marks); renderGrades();
+    });
+    gradeRoot.querySelectorAll('[data-add-mark]').forEach(button => button.onclick = () => { const moduleIndex = button.dataset.addMark, partIndex = button.dataset.addPart; marks[moduleIndex] ??= {}; marks[moduleIndex][partIndex] = markList(marks[moduleIndex][partIndex]); marks[moduleIndex][partIndex].push(''); put('mse.marks', marks); renderGrades(); });
   };
   renderPlan(); renderGrades();
 })();
