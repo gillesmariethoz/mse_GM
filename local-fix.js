@@ -22,6 +22,34 @@ renderPdf = async function () {
   nextPage.disabled = pdfPage === pdfDoc.numPages;
 };
 
+/* Le lien de retour dans les vues intégrées créait une seconde application. */
+document.querySelectorAll('.legacy-frame').forEach(frame => frame.addEventListener('load', () => {
+  try {
+    frame.contentDocument.querySelector('a[href="index.html"]')?.remove();
+  } catch (error) {}
+}));
+
+/* Annule uniquement la dernière annotation non encore enregistrée. */
+const readerTools = document.querySelector('.reader-tools > div:nth-child(2)');
+if (readerTools && !document.getElementById('undoPdf')) {
+  const undoPdf = document.createElement('button');
+  undoPdf.id = 'undoPdf';
+  undoPdf.className = 'tool';
+  undoPdf.type = 'button';
+  undoPdf.textContent = '↶ Annuler';
+  undoPdf.title = 'Annuler la dernière annotation';
+  undoPdf.onclick = () => {
+    if (!pending.length) {
+      pdfMessage.textContent = 'Il n’y a aucune annotation à annuler.';
+      return;
+    }
+    pending.pop();
+    draw();
+    pdfMessage.textContent = 'Dernière annotation annulée.';
+  };
+  readerTools.insertBefore(undoPdf, textInput);
+}
+
 /* Les quatre dossiers locaux restent visibles sous le cours sélectionné. */
 window.localSection = window.localSection || 'cours';
 localFiles = async function () {
@@ -57,7 +85,7 @@ function syncLegacyTheme(dark) {
         embeddedStyle.id = 'mse-embedded-style';
         documentInside.head.append(embeddedStyle);
       }
-      embeddedStyle.textContent = 'body::before{display:none!important}.gm-identity-row,.gm-app-nav,#theme{display:none!important}';
+      embeddedStyle.textContent = 'body::before{display:none!important}.gm-identity-row,.gm-app-nav,#theme{display:none!important}a[href="index.html"]{display:none!important}';
       const button = documentInside.getElementById('theme');
       if (button) button.textContent = dark ? '☀︎ Clair' : '☾ Sombre';
     } catch (error) {}
