@@ -78,6 +78,25 @@ const courseBarStyle = document.createElement('style');
 courseBarStyle.textContent = '.course-card .bar{display:block!important;position:relative!important;height:5px!important;overflow:hidden!important}.course-card .bar i{position:absolute!important;inset:0 auto 0 0!important;height:100%!important;max-width:100%!important;margin:0!important}';
 document.head.append(courseBarStyle);
 courseBarStyle.textContent += '.today-grid{align-items:start}.task-list{min-height:0}.new-task{flex-wrap:wrap}.new-task #taskInput{min-width:210px}.new-task #taskDate,.new-task #taskCourse{border:1px solid var(--line);border-radius:9px;padding:10px;background:var(--card);color:var(--ink);font:inherit}.task-main{display:block}.task-meta{display:block;margin-top:3px;font-size:11px;color:var(--muted)}';
+courseBarStyle.textContent += '.mobile-menu-toggle,.mobile-menu-panel{display:none}@media(max-width:780px){.mobile-nav{display:none!important}main>header{position:relative;padding-left:47px}.mobile-menu-toggle{display:grid;place-items:center;position:absolute;left:0;top:0;width:38px;height:38px;padding:0;border:1px solid var(--line);border-radius:9px;background:var(--card);color:var(--ink);font-size:20px;cursor:pointer}.mobile-menu-panel{position:absolute;z-index:30;top:47px;left:0;width:205px;padding:8px;border:1px solid var(--line);border-radius:12px;background:var(--card);box-shadow:0 16px 36px #101a2026}.mobile-menu-panel.open{display:grid;gap:3px}.mobile-menu-panel button{border:0;border-radius:8px;padding:11px;text-align:left;background:transparent;color:var(--ink);font:inherit;font-weight:700;cursor:pointer}.mobile-menu-panel button:hover{background:var(--soft)}}';
+
+/* Navigation complète sur téléphone : un seul burger en haut à gauche. */
+const topHeader = document.querySelector('main > header');
+if (topHeader && !document.getElementById('mobileMenuToggle')) {
+  const menuToggle = document.createElement('button');
+  menuToggle.id = 'mobileMenuToggle'; menuToggle.className = 'mobile-menu-toggle'; menuToggle.type = 'button'; menuToggle.title = 'Ouvrir le menu'; menuToggle.setAttribute('aria-label', 'Ouvrir le menu'); menuToggle.textContent = '☰';
+  const menuPanel = document.createElement('div');
+  menuPanel.id = 'mobileMenuPanel'; menuPanel.className = 'mobile-menu-panel';
+  menuPanel.innerHTML = '<button data-mobile-view="today">⌂ Accueil</button><button data-mobile-view="planning">▦ Planning</button><button data-mobile-view="grades">⌁ Notes</button><button data-mobile-view="courses">◫ Mes cours</button><button data-mobile-view="pdf">✎ Mes PDF</button>';
+  menuToggle.onclick = () => menuPanel.classList.toggle('open');
+  menuPanel.querySelectorAll('[data-mobile-view]').forEach(button => button.onclick = () => {
+    const target = button.dataset.mobileView;
+    menuPanel.classList.remove('open');
+    if (target === 'pdf') { show('courses'); setTimeout(() => document.getElementById('courseExplorer')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0); }
+    else show(target);
+  });
+  topHeader.prepend(menuToggle, menuPanel);
+}
 
 /* Les tâches peuvent être reliées à un cours et à une échéance. */
 const taskDate = document.createElement('input');
