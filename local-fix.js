@@ -74,6 +74,9 @@ if (LOCAL_MODE) localFiles();
 
 const themeToggle = document.getElementById('themeToggle');
 const themeText = document.getElementById('themeText');
+const courseBarStyle = document.createElement('style');
+courseBarStyle.textContent = '.course-card .bar{display:block!important;position:relative!important;height:5px!important;overflow:hidden!important}.course-card .bar i{position:absolute!important;inset:0 auto 0 0!important;height:100%!important;max-width:100%!important;margin:0!important}';
+document.head.append(courseBarStyle);
 function syncLegacyTheme(dark) {
   document.querySelectorAll('.legacy-frame').forEach(frame => {
     try {
