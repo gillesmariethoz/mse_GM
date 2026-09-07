@@ -115,6 +115,25 @@ if (topHeader && !document.getElementById('mobileMenuToggle')) {
   topHeader.prepend(menuToggle, menuPanel);
 }
 
+/* Installation PWA : l’application peut être ajoutée au téléphone ou au PC. */
+let installEvent;
+const installApp = document.createElement('button');
+installApp.id = 'installApp'; installApp.className = 'theme-toggle'; installApp.type = 'button';
+installApp.textContent = '⇩ Installer l’app'; installApp.title = 'Installer Master Mariethoz';
+document.getElementById('themeToggle')?.before(installApp);
+window.addEventListener('beforeinstallprompt', event => { event.preventDefault(); installEvent = event; installApp.hidden = false; });
+window.addEventListener('appinstalled', () => { installEvent = null; installApp.hidden = true; });
+installApp.onclick = async () => {
+  if (installEvent) {
+    installEvent.prompt();
+    await installEvent.userChoice;
+    installEvent = null;
+    installApp.hidden = true;
+    return;
+  }
+  alert('Pour installer l’application, ouvre le menu du navigateur puis choisis « Installer l’application » ou « Ajouter à l’écran d’accueil ».');
+};
+
 /* Les tâches peuvent être reliées à un cours et à une échéance. */
 const taskDate = document.createElement('input');
 taskDate.id = 'taskDate'; taskDate.type = 'date'; taskDate.setAttribute('aria-label', 'Échéance');
