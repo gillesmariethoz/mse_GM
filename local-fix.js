@@ -77,6 +77,33 @@ const themeText = document.getElementById('themeText');
 const courseBarStyle = document.createElement('style');
 courseBarStyle.textContent = '.course-card .bar{display:block!important;position:relative!important;height:5px!important;overflow:hidden!important}.course-card .bar i{position:absolute!important;inset:0 auto 0 0!important;height:100%!important;max-width:100%!important;margin:0!important}';
 document.head.append(courseBarStyle);
+courseBarStyle.textContent += '.new-task{flex-wrap:wrap}.new-task #taskInput{min-width:210px}.new-task #taskDate,.new-task #taskCourse{border:1px solid var(--line);border-radius:9px;padding:10px;background:var(--card);color:var(--ink);font:inherit}.task-main{display:block}.task-meta{display:block;margin-top:3px;font-size:11px;color:var(--muted)}';
+
+/* Les tâches peuvent être reliées à un cours et à une échéance. */
+const taskDate = document.createElement('input');
+taskDate.id = 'taskDate'; taskDate.type = 'date'; taskDate.setAttribute('aria-label', 'Échéance');
+const taskCourse = document.createElement('select');
+taskCourse.id = 'taskCourse'; taskCourse.setAttribute('aria-label', 'Cours concerné');
+taskCourse.innerHTML = '<option value="">Cours (facultatif)</option>' + modules.map(name => '<option>' + escape(name) + '</option>').join('');
+taskInput.after(taskDate, taskCourse);
+renderTasks = function () {
+  taskList.innerHTML = tasks.map((task, index) => {
+    const details = [task.course, task.date ? new Date(task.date + 'T12:00:00').toLocaleDateString('fr-CH', { day: '2-digit', month: 'short', year: 'numeric' }) : ''].filter(Boolean).join(' · ');
+    return `<label class="task ${task.done ? 'done' : ''}"><input type="checkbox" data-task="${index}" ${task.done ? 'checked' : ''}><span class="task-main">${escape(task.text)}${details ? `<small class="task-meta">${escape(details)}</small>` : ''}</span><button data-remove="${index}">×</button></label>`;
+  }).join('');
+  taskCount.textContent = tasks.filter(task => !task.done).length;
+  dashboard();
+  document.querySelectorAll('[data-task]').forEach(input => input.onchange = () => { tasks[input.dataset.task].done = input.checked; store('mse.online.tasks', tasks); renderTasks(); });
+  document.querySelectorAll('[data-remove]').forEach(button => button.onclick = () => { tasks.splice(button.dataset.remove, 1); store('mse.online.tasks', tasks); renderTasks(); });
+};
+taskForm.onsubmit = event => {
+  event.preventDefault();
+  if (!taskInput.value.trim()) return;
+  tasks.unshift({ text: taskInput.value.trim(), date: taskDate.value, course: taskCourse.value, done: false });
+  taskInput.value = ''; taskDate.value = ''; taskCourse.value = '';
+  store('mse.online.tasks', tasks); renderTasks();
+};
+renderTasks();
 function syncLegacyTheme(dark) {
   document.querySelectorAll('.legacy-frame').forEach(frame => {
     try {
