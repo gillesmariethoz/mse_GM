@@ -50,6 +50,23 @@ if (readerTools && !document.getElementById('undoPdf')) {
   readerTools.insertBefore(undoPdf, textInput);
 }
 
+/* Télécharge le PDF actuellement ouvert sans quitter l’application. */
+const saveButton = document.getElementById('savePdf');
+if (saveButton && !document.getElementById('downloadPdf')) {
+  const downloadPdf = document.createElement('button');
+  downloadPdf.id = 'downloadPdf'; downloadPdf.className = 'tool'; downloadPdf.type = 'button';
+  downloadPdf.textContent = '⇩ Télécharger le PDF';
+  downloadPdf.onclick = () => {
+    if (!sourceBytes) { pdfMessage.textContent = 'Ouvre d’abord un PDF.'; return; }
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([sourceBytes], { type: 'application/pdf' }));
+    link.download = fileName || 'document.pdf';
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  };
+  saveButton.before(downloadPdf);
+}
+
 /* Les quatre dossiers locaux restent visibles sous le cours sélectionné. */
 window.localSection = window.localSection || 'cours';
 localFiles = async function () {
