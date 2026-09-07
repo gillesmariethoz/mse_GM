@@ -17,6 +17,7 @@
     }`;
   document.head.insertAdjacentHTML('beforeend', `<style id="mse-print-style">${printCss}</style>`);
   window.addEventListener('DOMContentLoaded', () => {
+    document.querySelector('a[href="index.html"]')?.remove();
     const theme = document.getElementById('theme');
     if (theme && !document.getElementById('print')) {
       const button = document.createElement('button');
