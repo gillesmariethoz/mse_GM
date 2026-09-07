@@ -1,10 +1,11 @@
 /* Correctif du lecteur PDF : la zone de rendu est une classe CSS, pas un id. */
+let pdfZoom = 1;
 renderPdf = async function () {
   const page = await pdfDoc.getPage(pdfPage);
   const base = page.getViewport({ scale: 1 });
   const wrap = document.querySelector('.canvas-wrap');
   const available = Math.max(300, (wrap ? wrap.clientWidth : 300) - 3);
-  const viewport = page.getViewport({ scale: Math.min(1.45, available / base.width) });
+  const viewport = page.getViewport({ scale: Math.min(1.45, available / base.width) * pdfZoom });
   scaleOut = devicePixelRatio || 1;
   [pdfCanvas, inkCanvas].forEach(canvas => {
     canvas.width = viewport.width * scaleOut;
@@ -22,6 +23,115 @@ renderPdf = async function () {
   nextPage.disabled = pdfPage === pdfDoc.numPages;
 };
 
+/* À fort grossissement, le mode Déplacer fait défiler la page au doigt sans
+   créer d'annotation. Les outils Dessiner et Texte désactivent ce mode. */
+const originalLoadPdf = loadPdf;
+loadPdf = async function (...args) {
+  pdfZoom = 1;
+  return originalLoadPdf.apply(this, args);
+};
+const canvasWrap = document.querySelector('.canvas-wrap');
+let movePdfMode = false;
+let movePointer;
+let moveStart;
+const touchPoints = new Map();
+const blockedTouches = new Set();
+let pinchStart;
+let gestureFrame;
+let pendingGesturePosition;
+const clampPdfZoom = value => Math.max(.75, Math.min(3, value));
+const renderGesture = () => {
+  if (gestureFrame) return;
+  gestureFrame = requestAnimationFrame(async () => {
+    gestureFrame = null;
+    if (!pdfDoc || !pendingGesturePosition) return;
+    const position = pendingGesturePosition;
+    await renderPdf();
+    canvasWrap.scrollLeft = position.left;
+    canvasWrap.scrollTop = position.top;
+  });
+};
+const pointDistance = points => Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y);
+const pointCenter = points => ({ x: (points[0].x + points[1].x) / 2, y: (points[0].y + points[1].y) / 2 });
+/* Deux doigts servent toujours à agrandir et à parcourir le document : aucune
+   annotation ne peut alors être créée, quel que soit l’outil choisi. */
+inkCanvas.addEventListener('pointerdown', event => {
+  if (event.pointerType !== 'touch') return;
+  touchPoints.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  if (touchPoints.size < 2 || !canvasWrap) return;
+  const points = [...touchPoints.values()].slice(-2);
+  const rect = canvasWrap.getBoundingClientRect();
+  const center = pointCenter(points);
+  pinchStart = { distance: pointDistance(points), zoom: pdfZoom, left: canvasWrap.scrollLeft, top: canvasWrap.scrollTop, x: center.x - rect.left, y: center.y - rect.top };
+  [...touchPoints.keys()].forEach(id => blockedTouches.add(id));
+  drawing = null;
+  draw();
+  event.preventDefault();
+  event.stopImmediatePropagation();
+}, true);
+inkCanvas.addEventListener('pointermove', event => {
+  if (event.pointerType !== 'touch' || !touchPoints.has(event.pointerId)) return;
+  touchPoints.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  if (!pinchStart || touchPoints.size < 2 || !canvasWrap) {
+    if (blockedTouches.has(event.pointerId)) { event.preventDefault(); event.stopImmediatePropagation(); }
+    return;
+  }
+  const points = [...touchPoints.values()].slice(-2);
+  const distance = Math.max(1, pointDistance(points));
+  const center = pointCenter(points);
+  const rect = canvasWrap.getBoundingClientRect();
+  const factor = clampPdfZoom(pinchStart.zoom * distance / Math.max(1, pinchStart.distance)) / pinchStart.zoom;
+  pdfZoom = clampPdfZoom(pinchStart.zoom * distance / Math.max(1, pinchStart.distance));
+  document.getElementById('pdfZoomLabel').textContent = Math.round(pdfZoom * 100) + ' %';
+  pendingGesturePosition = { left: pinchStart.left * factor + pinchStart.x * factor - (center.x - rect.left), top: pinchStart.top * factor + pinchStart.y * factor - (center.y - rect.top) };
+  renderGesture();
+  event.preventDefault();
+  event.stopImmediatePropagation();
+}, true);
+const stopTouchGesture = event => {
+  if (event.pointerType !== 'touch') return;
+  const wasBlocked = blockedTouches.has(event.pointerId);
+  touchPoints.delete(event.pointerId);
+  blockedTouches.delete(event.pointerId);
+  if (touchPoints.size < 2) pinchStart = null;
+  if (wasBlocked) { event.preventDefault(); event.stopImmediatePropagation(); }
+};
+inkCanvas.addEventListener('pointerup', stopTouchGesture, true);
+inkCanvas.addEventListener('pointercancel', stopTouchGesture, true);
+const setPdfMoveMode = active => {
+  movePdfMode = active;
+  const moveButton = document.getElementById('movePdf');
+  if (moveButton) moveButton.classList.toggle('active', active);
+  inkCanvas.style.cursor = active ? 'grab' : 'crosshair';
+  if (active) pdfMessage.textContent = 'Mode déplacement : fais glisser le PDF avec un doigt.';
+};
+inkCanvas.addEventListener('pointerdown', event => {
+  if (!movePdfMode || !canvasWrap) return;
+  movePointer = event.pointerId;
+  moveStart = { x: event.clientX, y: event.clientY, left: canvasWrap.scrollLeft, top: canvasWrap.scrollTop };
+  inkCanvas.setPointerCapture(event.pointerId);
+  inkCanvas.style.cursor = 'grabbing';
+  event.preventDefault();
+  event.stopImmediatePropagation();
+}, true);
+inkCanvas.addEventListener('pointermove', event => {
+  if (event.pointerId !== movePointer || !moveStart || !canvasWrap) return;
+  canvasWrap.scrollLeft = moveStart.left - (event.clientX - moveStart.x);
+  canvasWrap.scrollTop = moveStart.top - (event.clientY - moveStart.y);
+  event.preventDefault();
+  event.stopImmediatePropagation();
+}, true);
+const stopPdfMove = event => {
+  if (event.pointerId !== movePointer) return;
+  movePointer = null;
+  moveStart = null;
+  if (movePdfMode) inkCanvas.style.cursor = 'grab';
+  event.preventDefault();
+  event.stopImmediatePropagation();
+};
+inkCanvas.addEventListener('pointerup', stopPdfMove, true);
+inkCanvas.addEventListener('pointercancel', stopPdfMove, true);
+
 /* Le lien de retour dans les vues intégrées créait une seconde application. */
 document.querySelectorAll('.legacy-frame').forEach(frame => frame.addEventListener('load', () => {
   try {
@@ -31,6 +141,21 @@ document.querySelectorAll('.legacy-frame').forEach(frame => frame.addEventListen
 
 /* Annule uniquement la dernière annotation non encore enregistrée. */
 const readerTools = document.querySelector('.reader-tools > div:nth-child(2)');
+if (readerTools && !document.getElementById('zoomInPdf')) {
+  const zoomControls = document.createElement('div');
+  zoomControls.className = 'pdf-zoom-controls';
+  zoomControls.innerHTML = '<button id="zoomOutPdf" class="tool" type="button" title="Réduire le PDF">−</button><b id="pdfZoomLabel">100 %</b><button id="zoomInPdf" class="tool" type="button" title="Agrandir le PDF">+</button><button id="movePdf" class="tool" type="button">✥ Déplacer</button>';
+  const refreshZoom = () => {
+    document.getElementById('pdfZoomLabel').textContent = Math.round(pdfZoom * 100) + ' %';
+    if (pdfDoc) renderPdf();
+  };
+  zoomControls.querySelector('#zoomOutPdf').onclick = () => { pdfZoom = clampPdfZoom(+(pdfZoom - .25).toFixed(2)); refreshZoom(); };
+  zoomControls.querySelector('#zoomInPdf').onclick = () => { pdfZoom = clampPdfZoom(+(pdfZoom + .25).toFixed(2)); refreshZoom(); };
+  zoomControls.querySelector('#movePdf').onclick = () => setPdfMoveMode(!movePdfMode);
+  readerTools.prepend(zoomControls);
+  penTool.addEventListener('click', () => setPdfMoveMode(false));
+  textTool.addEventListener('click', () => setPdfMoveMode(false));
+}
 if (readerTools && !document.getElementById('undoPdf')) {
   const undoPdf = document.createElement('button');
   undoPdf.id = 'undoPdf';
@@ -94,8 +219,8 @@ const themeText = document.getElementById('themeText');
 const courseBarStyle = document.createElement('style');
 courseBarStyle.textContent = '.course-card .bar{display:block!important;position:relative!important;height:5px!important;overflow:hidden!important}.course-card .bar i{position:absolute!important;inset:0 auto 0 0!important;height:100%!important;max-width:100%!important;margin:0!important}';
 document.head.append(courseBarStyle);
-courseBarStyle.textContent += '.today-grid{align-items:start}.task-list{min-height:0}.new-task{flex-wrap:wrap}.new-task #taskInput{min-width:210px}.new-task #taskDate,.new-task #taskCourse{border:1px solid var(--line);border-radius:9px;padding:10px;background:var(--card);color:var(--ink);font:inherit}.task-main{display:block}.task-meta{display:block;margin-top:3px;font-size:11px;color:var(--muted)}html[data-theme="dark"] .connect-drive{background:#edf3ef!important;color:#102025!important}html[data-theme="dark"] .connect-drive:disabled{background:#aab9b2!important;color:#34413c!important}';
-courseBarStyle.textContent += '.mobile-menu-toggle,.mobile-menu-panel{display:none}@media(max-width:780px){.mobile-nav{display:none!important}#installApp{display:none}main>header{position:relative;padding-left:47px}.mobile-menu-toggle{display:grid;place-items:center;position:absolute;left:0;top:0;width:38px;height:38px;padding:0;border:1px solid var(--line);border-radius:9px;background:var(--card);color:var(--ink);font-size:20px;cursor:pointer}.mobile-menu-panel{position:absolute;z-index:30;top:47px;left:0;width:205px;padding:8px;border:1px solid var(--line);border-radius:12px;background:var(--card);box-shadow:0 16px 36px #101a2026}.mobile-menu-panel.open{display:grid;gap:3px}.mobile-menu-panel button{border:0;border-radius:8px;padding:11px;text-align:left;background:transparent;color:var(--ink);font:inherit;font-weight:700;cursor:pointer}.mobile-menu-panel button:hover{background:var(--soft)}}';
+courseBarStyle.textContent += '.today-grid{align-items:start}.task-list{min-height:0}.new-task{flex-wrap:wrap}.new-task #taskInput{min-width:210px}.new-task #taskDate,.new-task #taskCourse{border:1px solid var(--line);border-radius:9px;padding:10px;background:var(--card);color:var(--ink);font:inherit}.task-main{display:block}.task-meta{display:block;margin-top:3px;font-size:11px;color:var(--muted)}.pdf-zoom-controls{display:flex;gap:6px;align-items:center}.pdf-zoom-controls b{min-width:45px;text-align:center;font-size:12px}html[data-theme="dark"] .connect-drive{background:#edf3ef!important;color:#102025!important}html[data-theme="dark"] .connect-drive:disabled{background:#aab9b2!important;color:#34413c!important}';
+courseBarStyle.textContent += '.mobile-menu-toggle,.mobile-menu-panel{display:none}@media(max-width:780px){.mobile-nav{display:none!important}main>header{position:relative;padding-left:47px}.mobile-menu-toggle{display:grid;place-items:center;position:absolute;left:0;top:0;width:38px;height:38px;padding:0;border:1px solid var(--line);border-radius:9px;background:var(--card);color:var(--ink);font-size:20px;cursor:pointer}.mobile-menu-panel{position:absolute;z-index:30;top:47px;left:0;width:205px;padding:8px;border:1px solid var(--line);border-radius:12px;background:var(--card);box-shadow:0 16px 36px #101a2026}.mobile-menu-panel.open{display:grid;gap:3px}.mobile-menu-panel button{border:0;border-radius:8px;padding:11px;text-align:left;background:transparent;color:var(--ink);font:inherit;font-weight:700;cursor:pointer}.mobile-menu-panel button:hover{background:var(--soft)}}';
 
 /* Navigation complète sur téléphone : un seul burger en haut à gauche. */
 const topHeader = document.querySelector('main > header');
@@ -104,36 +229,15 @@ if (topHeader && !document.getElementById('mobileMenuToggle')) {
   menuToggle.id = 'mobileMenuToggle'; menuToggle.className = 'mobile-menu-toggle'; menuToggle.type = 'button'; menuToggle.title = 'Ouvrir le menu'; menuToggle.setAttribute('aria-label', 'Ouvrir le menu'); menuToggle.textContent = '☰';
   const menuPanel = document.createElement('div');
   menuPanel.id = 'mobileMenuPanel'; menuPanel.className = 'mobile-menu-panel';
-  menuPanel.innerHTML = '<button data-mobile-view="today">⌂ Accueil</button><button data-mobile-view="planning">▦ Planning</button><button data-mobile-view="grades">⌁ Notes</button><button data-mobile-view="courses">◫ Mes cours</button><button data-mobile-view="pdf">✎ Mes PDF</button><button id="mobileInstallApp">⇩ Installer l’app</button>';
+  menuPanel.innerHTML = '<button data-mobile-view="today">⌂ Accueil</button><button data-mobile-view="planning">▦ Planning</button><button data-mobile-view="grades">⌁ Notes</button><button data-mobile-view="courses">◫ Mes cours</button>';
   menuToggle.onclick = () => menuPanel.classList.toggle('open');
   menuPanel.querySelectorAll('[data-mobile-view]').forEach(button => button.onclick = () => {
     const target = button.dataset.mobileView;
     menuPanel.classList.remove('open');
-    if (target === 'pdf') { show('courses'); setTimeout(() => document.getElementById('courseExplorer')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0); }
-    else show(target);
+    show(target);
   });
   topHeader.prepend(menuToggle, menuPanel);
 }
-
-/* Installation PWA : l’application peut être ajoutée au téléphone ou au PC. */
-let installEvent;
-const installApp = document.createElement('button');
-installApp.id = 'installApp'; installApp.className = 'theme-toggle'; installApp.type = 'button';
-installApp.textContent = '⇩ Installer l’app'; installApp.title = 'Installer Master Mariethoz';
-document.getElementById('themeToggle')?.before(installApp);
-window.addEventListener('beforeinstallprompt', event => { event.preventDefault(); installEvent = event; installApp.hidden = false; });
-window.addEventListener('appinstalled', () => { installEvent = null; installApp.hidden = true; });
-installApp.onclick = async () => {
-  if (installEvent) {
-    installEvent.prompt();
-    await installEvent.userChoice;
-    installEvent = null;
-    installApp.hidden = true;
-    return;
-  }
-  alert('Pour installer l’application, ouvre le menu du navigateur puis choisis « Installer l’application » ou « Ajouter à l’écran d’accueil ».');
-};
-document.getElementById('mobileInstallApp')?.addEventListener('click', () => { document.getElementById('mobileMenuPanel')?.classList.remove('open'); installApp.click(); });
 
 /* Les tâches peuvent être reliées à un cours et à une échéance. */
 const taskDate = document.createElement('input');
