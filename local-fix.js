@@ -223,6 +223,24 @@ courseBarStyle.textContent += '.today-grid{align-items:start}.task-list{min-heig
 courseBarStyle.textContent += 'html[data-theme="dark"] .action,html[data-theme="dark"] .new-task button,html[data-theme="dark"] .native-button.primary{background:#ef6945!important;color:#fff!important}html[data-theme="dark"] .question-form button,html[data-theme="dark"] .folder-tab.active{background:#f6dfd5!important;color:#7c2b15!important;border-color:#f07955!important}html[data-theme="dark"] .tool.active{background:#4b3027!important;color:#ffd5c7!important;border-color:#f07955!important}html[data-theme="dark"] .save{background:#ef6945!important;color:#fff!important}html[data-theme="dark"] .new-task button:hover,html[data-theme="dark"] .action:hover,html[data-theme="dark"] .native-button.primary:hover{background:#f68a6b!important;color:#fff!important}';
 courseBarStyle.textContent += '.mobile-menu-toggle,.mobile-menu-panel{display:none}@media(max-width:780px){.mobile-nav{display:none!important}main>header{position:relative;padding-left:47px}.mobile-menu-toggle{display:grid;place-items:center;position:absolute;left:0;top:0;width:38px;height:38px;padding:0;border:1px solid var(--line);border-radius:9px;background:var(--card);color:var(--ink);font-size:20px;cursor:pointer}.mobile-menu-panel{position:absolute;z-index:30;top:47px;left:0;width:205px;padding:8px;border:1px solid var(--line);border-radius:12px;background:var(--card);box-shadow:0 16px 36px #101a2026}.mobile-menu-panel.open{display:grid;gap:3px}.mobile-menu-panel button{border:0;border-radius:8px;padding:11px;text-align:left;background:transparent;color:var(--ink);font:inherit;font-weight:700;cursor:pointer}.mobile-menu-panel button:hover{background:var(--soft)}}';
 
+/* Le type officiel reste visible sur chacune des vignettes de cours. */
+const moduleCodes=['FTP','MA','FTP','FTP','CM','FTP','TSM','TSM','CM','FTP','MA'];
+courseBarStyle.textContent += '.course-code{display:inline-block;margin-bottom:8px;color:var(--accent);font-size:10px;font-weight:900;letter-spacing:.12em}.course-card b{margin-top:0!important}';
+renderCourses = function () {
+  courseGrid.innerHTML = modules.map((name, index) => `<button class="course-card ${index === selected ? 'active' : ''}" data-course="${index}"><span class="course-code">${moduleCodes[index]}</span><b>${escape(name)}</b><small>${progress[index] || 0}% terminé</small><span class="bar"><i style="width:${progress[index] || 0}%"></i></span></button>`).join('');
+  document.querySelectorAll('[data-course]').forEach(button => button.onclick = () => {
+    selected = +button.dataset.course;
+    folderId = null; folderCourse = -1;
+    renderCourses(); renderDetail();
+    driveTitle.textContent = `Documents · ${modules[selected]}`;
+    if (LOCAL_MODE) localFiles();
+    else if (account) folder().then(listFiles).catch(error => driveState(error.message));
+    dashboard();
+  });
+  dashboard();
+};
+renderCourses();
+
 /* Navigation complète sur téléphone : un seul burger en haut à gauche. */
 const topHeader = document.querySelector('main > header');
 if (topHeader && !document.getElementById('mobileMenuToggle')) {
