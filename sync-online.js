@@ -38,4 +38,4 @@ function queueCloudState(){clearTimeout(stateTimer);stateTimer=setTimeout(saveCl
 Storage.prototype.setItem=function(key,value){nativeSetItem.call(this,key,value);if(this===localStorage&&STATE_KEYS.includes(key)){putLocal(STATE_TIME,String(Date.now()));if(stateReady)queueCloudState()}};
 async function synchronizeState(){try{const remote=await readCloudState(),localTime=+localStorage.getItem(STATE_TIME)||0;if(remote&&(+remote.updatedAt||0)>localTime)applyCloudState(remote);else{stateReady=true;await saveCloudState();return}stateReady=true}catch(error){stateReady=false}}
 if(LOCAL_MODE)setTimeout(synchronizeState,350);
-else{const connectForState=connect;connect=async function(){await connectForState();if(account)await synchronizeState()};connectDrive.onclick=connect}
+else{const connectForState=connect;connect=async function(){await connectForState();if(account)await synchronizeState()};connectDrive.onclick=connect;setTimeout(async()=>{try{await init();await selectHesAccount();if(account)await synchronizeState()}catch(error){}},900)}
