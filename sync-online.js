@@ -4,7 +4,7 @@ const MASTER_SECTIONS=[['cours','Cours','01_Cours'],['exercices','Exercices','02
 let onlineBaseId,onlineCourseId,onlineSectionId,onlineCourseIndex=-1,onlineSection=null,onlineTrail=[];
 
 driveState=function(text,on=false){driveStatus.textContent=text;driveBadge.textContent=on?'SYNCHRONISÉ':'NON CONNECTÉ';driveBadge.classList.toggle('synced',on)};
-async function rootFromPath(parts){const path=parts.map(encodeURIComponent).join('/');const response=await fetch('https://graph.microsoft.com/v1.0/me/drive/root:/'+path,{headers:{Authorization:'Bearer '+await token(true)}});if(response.status===404)return null;if(!response.ok)throw Error('OneDrive a répondu '+response.status+'.');return await response.json()}
+async function rootFromPath(parts){const path=parts.map(encodeURIComponent).join('/');const response=await fetch('https://graph.microsoft.com/v1.0/me/drive/root:/'+path,{headers:{Authorization:'Bearer '+await token(false)}});if(response.status===404)return null;if(!response.ok)throw Error('OneDrive a répondu '+response.status+'.');return await response.json()}
 async function onlineRoot(){if(onlineBaseId)return onlineBaseId;for(const candidate of [['HES-SO-Master','semestre 1'],['semestre 1']]){const item=await rootFromPath(candidate);if(item){onlineBaseId=item.id;return onlineBaseId}}throw Error('Dossier « HES-SO-Master / semestre 1 » introuvable dans ce OneDrive.');}
 async function child(parentId,name){const data=await(await graph('/me/drive/items/'+parentId+'/children?$select=id,name,folder')).json();return data.value.find(item=>item.folder&&item.name===name)}
 folder=async function(){if(!onlineSection)return null;if(onlineSectionId&&onlineCourseIndex===selected)return onlineSectionId;const base=await onlineRoot();const course=await child(base,MODULE_FOLDERS[selected]);if(!course)throw Error('Dossier du cours '+modules[selected]+' introuvable.');const section=MASTER_SECTIONS.find(item=>item[0]===onlineSection);const folderItem=await child(course.id,section[2]);if(!folderItem)throw Error('Dossier « '+section[1]+' » introuvable.');onlineCourseId=course.id;onlineSectionId=folderItem.id;onlineCourseIndex=selected;return onlineSectionId};
@@ -27,6 +27,13 @@ const STATE_KEYS=['mse.online.tasks','mse.online.progress','mse.online.questions
 const STATE_TIME='mse.online.state.updatedAt';
 const nativeSetItem=Storage.prototype.setItem;
 let stateReady=false,stateWriting=false,stateTimer;
+const prioritySync=document.createElement('button');
+prioritySync.type='button';prioritySync.className='priority-sync';prioritySync.textContent='Synchroniser mes priorités';
+taskForm.after(prioritySync);
+const prioritySyncStyle=document.createElement('style');
+prioritySyncStyle.textContent='.priority-sync{margin-top:10px;border:1px solid var(--line);border-radius:8px;padding:7px 10px;background:transparent;color:var(--muted);font:700 12px/1 inherit;cursor:pointer}.priority-sync:hover{border-color:var(--accent);color:var(--accent)}.priority-sync.ok{color:#26734f;border-color:#86c8a4}.priority-sync.error{color:var(--accent);border-color:var(--accent)}html[data-theme="dark"] .priority-sync.ok{color:#9fdbb9;border-color:#54846a}';
+document.head.append(prioritySyncStyle);
+function stateMessage(text,type=''){prioritySync.textContent=text;prioritySync.classList.toggle('ok',type==='ok');prioritySync.classList.toggle('error',type==='error')}
 const jsonValue=(key,fallback)=>{try{return JSON.parse(localStorage.getItem(key)||'')}catch(error){return fallback}};
 const putLocal=(key,value)=>nativeSetItem.call(localStorage,key,value);
 function currentState(){return {version:1,updatedAt:+localStorage.getItem(STATE_TIME)||Date.now(),tasks:jsonValue('mse.online.tasks',[]),progress:jsonValue('mse.online.progress',{}),questions:jsonValue('mse.online.questions',{})}}
@@ -36,6 +43,7 @@ function applyCloudState(state){const nextTasks=Array.isArray(state.tasks)?state
 async function saveCloudState(){if(!stateReady||stateWriting)return;stateWriting=true;try{const time=Date.now();putLocal(STATE_TIME,String(time));await writeCloudState({...currentState(),updatedAt:time})}catch(error){}finally{stateWriting=false}}
 function queueCloudState(){clearTimeout(stateTimer);stateTimer=setTimeout(saveCloudState,650)}
 Storage.prototype.setItem=function(key,value){nativeSetItem.call(this,key,value);if(this===localStorage&&STATE_KEYS.includes(key)){putLocal(STATE_TIME,String(Date.now()));if(stateReady)queueCloudState()}};
-async function synchronizeState(){try{const remote=await readCloudState(),localTime=+localStorage.getItem(STATE_TIME)||0;if(remote&&(+remote.updatedAt||0)>localTime)applyCloudState(remote);else{stateReady=true;await saveCloudState();return}stateReady=true}catch(error){stateReady=false}}
+async function synchronizeState(interactive=false){try{await init();await selectHesAccount();if(!account){stateReady=false;stateMessage('Connecter HES-SO pour synchroniser','error');if(interactive)await token(true);return false}if(interactive&&!await token(true))return false;stateMessage('Synchronisation des priorités…');const remote=await readCloudState(),localTime=+localStorage.getItem(STATE_TIME)||0;if(remote&&(+remote.updatedAt||0)>localTime)applyCloudState(remote);else{stateReady=true;await saveCloudState()}stateReady=true;stateMessage('Priorités synchronisées','ok');return true}catch(error){stateReady=false;stateMessage('Réessayer la synchronisation','error');return false}}
+prioritySync.onclick=()=>synchronizeState(true);
 if(LOCAL_MODE)setTimeout(synchronizeState,350);
-else{const connectForState=connect;connect=async function(){await connectForState();if(account)await synchronizeState()};connectDrive.onclick=connect;setTimeout(async()=>{try{await init();await selectHesAccount();if(account)await synchronizeState()}catch(error){}},900)}
+else{const connectForState=connect;connect=async function(){await connectForState();if(account)await synchronizeState()};connectDrive.onclick=connect;setTimeout(()=>synchronizeState(false),900)}
