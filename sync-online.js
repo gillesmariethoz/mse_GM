@@ -30,10 +30,14 @@ let stateReady=false,stateWriting=false,stateTimer;
 const prioritySync=document.createElement('button');
 prioritySync.type='button';prioritySync.className='priority-sync';prioritySync.textContent='Synchroniser mes priorités';
 taskForm.after(prioritySync);
+const priorityState=document.createElement('p');
+priorityState.className='priority-state';priorityState.setAttribute('aria-live','polite');
+priorityState.textContent='Aucune synchronisation lancée sur cet appareil.';
+prioritySync.after(priorityState);
 const prioritySyncStyle=document.createElement('style');
-prioritySyncStyle.textContent='.priority-sync{margin-top:10px;border:1px solid var(--line);border-radius:8px;padding:7px 10px;background:transparent;color:var(--muted);font:700 12px/1 inherit;cursor:pointer}.priority-sync:hover{border-color:var(--accent);color:var(--accent)}.priority-sync.ok{color:#26734f;border-color:#86c8a4}.priority-sync.error{color:var(--accent);border-color:var(--accent)}html[data-theme="dark"] .priority-sync.ok{color:#9fdbb9;border-color:#54846a}';
+prioritySyncStyle.textContent='.priority-sync{margin-top:10px;border:1px solid var(--line);border-radius:8px;padding:7px 10px;background:transparent;color:var(--muted);font:700 12px/1 inherit;cursor:pointer}.priority-sync:hover{border-color:var(--accent);color:var(--accent)}.priority-sync.ok{color:#26734f;border-color:#86c8a4}.priority-sync.error{color:var(--accent);border-color:var(--accent)}.priority-state{margin:7px 0 0;color:var(--muted);font-size:12px;line-height:1.35}html[data-theme="dark"] .priority-sync.ok{color:#9fdbb9;border-color:#54846a}';
 document.head.append(prioritySyncStyle);
-function stateMessage(text,type=''){prioritySync.textContent=text;prioritySync.classList.toggle('ok',type==='ok');prioritySync.classList.toggle('error',type==='error')}
+function stateMessage(text,type=''){prioritySync.textContent=text;prioritySync.classList.toggle('ok',type==='ok');prioritySync.classList.toggle('error',type==='error');priorityState.textContent=''+new Date().toLocaleTimeString('fr-CH',{hour:'2-digit',minute:'2-digit'})+' — '+text}
 function stateError(error){const text=String(error?.errorCode||error?.message||error||'').replace(/\s+/g,' ').trim();if(/interaction_required|login_required|no_account/i.test(text))return 'Session HES-SO expirée : appuie pour reconnecter';if(/403|access denied|forbidden/i.test(text))return 'HES-SO doit autoriser l’accès à OneDrive';if(/404|introuvable/i.test(text))return 'Dossier Master introuvable dans OneDrive';return text?'Connexion : '+text.slice(0,92):'Réessayer la synchronisation'}
 const jsonValue=(key,fallback)=>{try{return JSON.parse(localStorage.getItem(key)||'')}catch(error){return fallback}};
 const putLocal=(key,value)=>nativeSetItem.call(localStorage,key,value);
@@ -45,7 +49,7 @@ function applyCloudState(state){const nextTasks=Array.isArray(state.tasks)?state
 async function saveCloudState(){if(!stateReady||stateWriting)return;stateWriting=true;try{const time=Date.now();putLocal(STATE_TIME,String(time));await writeCloudState({...currentState(),updatedAt:time})}catch(error){}finally{stateWriting=false}}
 function queueCloudState(){clearTimeout(stateTimer);stateTimer=setTimeout(saveCloudState,650)}
 Storage.prototype.setItem=function(key,value){nativeSetItem.call(this,key,value);if(this===localStorage&&STATE_KEYS.includes(key)){putLocal(STATE_TIME,String(Date.now()));if(stateReady)queueCloudState()}};
-async function synchronizeState(interactive=false){try{await init();await selectHesAccount();if(!account){stateReady=false;stateMessage('Connecter HES-SO pour synchroniser','error');if(interactive)await token(true);return false}if(interactive&&!await token(true))return false;stateMessage('Synchronisation des priorités…');const remote=await readCloudState(),localTime=+localStorage.getItem(STATE_TIME)||0;if(remote&&(+remote.updatedAt||0)>localTime)applyCloudState(remote);else{stateReady=true;await saveCloudState()}stateReady=true;stateMessage('Priorités synchronisées','ok');return true}catch(error){stateReady=false;stateMessage(stateError(error),'error');return false}}
+async function synchronizeState(interactive=false){try{stateMessage('Vérification de la connexion HES-SO…');await init();await selectHesAccount();if(!account){stateReady=false;stateMessage('Ouverture de la connexion HES-SO…');if(interactive)await token(true);return false}if(interactive&&!await token(true))return false;stateMessage('Synchronisation des priorités…');const remote=await readCloudState(),localTime=+localStorage.getItem(STATE_TIME)||0;if(remote&&(+remote.updatedAt||0)>localTime)applyCloudState(remote);else{stateReady=true;await saveCloudState()}stateReady=true;stateMessage('Priorités synchronisées','ok');return true}catch(error){stateReady=false;stateMessage(stateError(error),'error');return false}}
 prioritySync.onclick=()=>synchronizeState(true);
 if(LOCAL_MODE)setTimeout(synchronizeState,350);
 else{const connectForState=connect;connect=async function(){await connectForState();if(account)await synchronizeState()};connectDrive.onclick=connect;setTimeout(()=>synchronizeState(false),900)}
